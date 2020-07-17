@@ -3,6 +3,8 @@
 
 import sys
 from PIL import Image
+import numpy as np
+import scipy.ndimage.filters
 
 
 class Img:
@@ -20,6 +22,13 @@ class Img:
         except IndexError:
             return False
         return c[0] + c[1] + c[2] > 382
+
+    def to_numpy(self):
+        im = np.zeros(self.size)
+        for y in range(self.size[1]):
+            for x in range(self.size[0]):
+                im[x][y] = self[x, y]
+        return im
 
     def dump(self, ix, iy, higlight = set()):
         for y in iy:
@@ -107,71 +116,125 @@ def decode_number(img, x, y):
 
     return (size, size+negative), result
 
-        
-def decode_number(img, x, y):
-    if img[x - 1, y - 1] or img[x, y - 1] or img[x - 1, y] or img[x, y]:
-        return None
+M = 1
+A = 0
+N = -1
 
-    # Get the size by iterating over top and left edges
-    size = 0
-    negative = False
-    while True:
-        items = (
-            img[x + size + 1, y - 1],
-            img[x + size + 1, y],
-            img[x - 1, y + size + 1],
-            img[x, y + size + 1],
-        )
-        if items == (False, True, False, True):
-            size += 1
-            continue
-        if items == (False, False, False, False):
-            break
-        if items == (False, False, False, True):
-            negative = True
-            break
-        return None
-
-    if size == 0:
-        return None
-
-    # Check that right and bottom edges are empty
-    for i in range(1,size + 2):
-        if img[x + size + 1, y+i] or img[x+i, y + size + 1]:
-            return None
-
-    # Decode the number
-    result, d = 0, 1
-    for iy in range(size):
-        for ix in range(size):
-            result += d * img[x + ix + 1, y + iy + 1]
-            d *= 2
-
-    if negative:
-        result = -result
-
-    return (size, size+negative), result
+from copy import copy
 
 
+syms = [
+    ("=",
+     [[M, M, M],
+      [M, A, A],
+      [M, M, M]
+     ]),
+    ("ap",
+     [[M, M],
+      [M, N]
+    ])
+]
+
+def add_border(x):
+    y = np.zeros((x.shape[0]+2, x.shape[1]+2))
+    y.fill(N)
+    y[1:-1, 1:-1] = x
+    return y
+syms  = [(name, add_border(np.array(f).transpose()))
+         for (name, f) in syms]
 
 
+filts = [
+    [[N, M, N],
+     [M, A, A],
+     [N, A, A]
+    ],
+    [[N, M, M, N],
+     [M, A, A, N],
+     [M, A, A, N],
+     [N, A, A, A],
+    ],
+    [[N, M, M, M, N],
+     [M, A, A, A, N],
+     [M, A, A, A, N],
+     [M, A, A, A, N],
+     [N, A, A, A, A],
+    ],
+    [[N, M, M, M, M, N],
+     [M, A, A, A, A, N],
+     [M, A, A, A, A, N],
+     [M, A, A, A, A, N],
+     [M, A, A, A, A, N],
+     [N, A, A, A, A, A],
+    ],
+    [[N, M, M, M, M, M, N],
+     [M, A, A, A, A, A, N],
+     [M, A, A, A, A, A, N],
+     [M, A, A, A, A, A, N],
+     [M, A, A, A, A, A, N],
+     [M, A, A, A, A, A, N],
+
+     [N, A, A, A, A, A, A],
+    ]
+
+
+]
+nfilts = []
+for f in filts:
+    f2 = [[y for y in x] for x in f]
+    f2[-1][0] = 1
+    nfilts.append(f2)
+
+number_filters  = [np.array(f).transpose()
+                   for f in filts]
+
+neg_filters  = [np.array(f).transpose()
+                for f in nfilts]
+
+import math
 def main(in_fname, out_fname):
     img = Img(in_fname, 4)
     svg = Svg(out_fname, img.size[0], img.size[1])
+
+    n  = img.to_numpy()
 
     for y in range(img.size[1]):
         for x in range(img.size[0]):
             if img[x, y]:
                 svg.point(x, y)
 
-    for y in range(img.size[1]):
-        for x in range(img.size[0]):
-            n = decode_number(img, x, y)
-            if n is not None:
-                svg.annotation(x - 0.5, y - 0.5, n[0][0] + 2, n[0][1] + 2, n[1])
-            n = decode_symbol(img, x, y)
-            if n is not None:
-                svg.annotation(x - 0.5, y - 0.5, n[0][0] + 2, n[0][1] + 2, n[1])
+    def find(f):
+        ori = (
+            -math.floor(f.shape[0]/2),
+            -math.floor(f.shape[1]/2)
+        )
+        out =  scipy.ndimage.filters.correlate(n, f,
+                                               mode="constant",
+                                               cval=0.0,
+                                               origin = ori
+        )
+        return (out == (f == 1).sum()).nonzero()
+
+    def add_sym(name, f):
+        nz = find(f)
+        for x, y in zip(nz[0].tolist(), nz[1].tolist()):
+            svg.annotation(x, y , f.shape[0], f.shape[1], name)
+
+    def add_num(off, f, neg=False):
+        nz = find(f)
+        for x, y in zip(nz[0].tolist(), nz[1].tolist()):
+            vals = np.flip(n[x+1:x+off+1, y+1:y+off+1].transpose().reshape(-1))
+            v = int(vals.dot(2**(np.arange(vals.size)[::-1])))
+            svg.annotation(x, y, f.shape[0], f.shape[1], v if not neg else -v)
+
+    for name, f in syms:
+        add_sym(name, f)
+
+    for off, f in enumerate(number_filters, 1):
+        add_num(off, f, False)
+    for off, f in enumerate(neg_filters, 1):
+        add_num(off, f, True)
+
 
     svg.close()
 
