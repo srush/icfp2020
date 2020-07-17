@@ -5,8 +5,8 @@ import sys
 from PIL import Image
 import numpy as np
 import scipy.ndimage.filters
-
-
+import math
+from lang import *
 class Img:
     def __init__(self, fname, zoom):
         self._img = Image.open(fname)
@@ -132,7 +132,12 @@ syms = [
     ("ap",
      [[M, M],
       [M, N]
-    ])
+     ]),
+    ("inc",
+     [[M, M, M, M],
+     [M, M, A, A],
+     [M, A, A, A],
+     [M, A, A, A]])
 ]
 
 def add_border(x):
@@ -143,6 +148,39 @@ def add_border(x):
 syms  = [(name, add_border(np.array(f).transpose()))
          for (name, f) in syms]
 
+vars = [
+    [[M, M, M],
+     [M, A, M],
+     [M, M, M]
+    ],
+    [[M, M, M, M],
+     [M, A, A, M],
+     [M, A, A, M],
+     [M, M, M, M],
+    ],
+    [[M, M, M, M, M],
+     [M, A, A, A, M],
+     [M, A, A, A, M],
+     [M, A, A, A, M],
+     [M, M, M, M, M],
+    ],
+    [[M, M, M, M, M, M],
+     [M, A, A, A, A, M],
+     [M, A, A, A, A, M],
+     [M, A, A, A, A, M],
+     [M, A, A, A, A, M],
+     [N, M, M, M, M, M],
+    ]
+]
+
+vars = [np.array(f).transpose()
+        for f in vars]
+
+incs = [
+    [[M, M, M, M],
+     [M, M, A, A],
+     [M, A, A, A],
+     [M, A, A, A]]]
 
 filts = [
     [[N, M, N],
@@ -173,11 +211,8 @@ filts = [
      [M, A, A, A, A, A, N],
      [M, A, A, A, A, A, N],
      [M, A, A, A, A, A, N],
-
      [N, A, A, A, A, A, A],
     ]
-
-
 ]
 nfilts = []
 for f in filts:
@@ -191,7 +226,44 @@ number_filters  = [np.array(f).transpose()
 neg_filters  = [np.array(f).transpose()
                 for f in nfilts]
 
-import math
+
+
+def find(n, f):
+    ori = (
+        -math.floor(f.shape[0]/2),
+        -math.floor(f.shape[1]/2)
+    )
+    out =  scipy.ndimage.filters.correlate(n, f,
+                                           mode="constant",
+                                           cval=0.0,
+                                           origin = ori
+    )
+    return (out == (f == 1).sum()).nonzero()
+
+def convert_to_number(area):
+    vals = np.flip(area.transpose().reshape(-1))
+    v = int(vals.dot(2**(np.arange(vals.size)[::-1])))
+    return v
+
+def add_sym(n, name, f, extra=None):
+    nz = find(n, f)
+    items = []
+    for x, y in zip(nz[0].tolist(), nz[1].tolist()):
+        if extra is not None:
+            content = extra(n[x:f.shape[0], y:f.shape[1]])
+        sym = Sym(name, content)
+        items.append(Item(x, y , f.shape[0], f.shape[1], sym))
+    return items
+
+def add_num(n, off, f, neg=False):
+    nz = find(n ,f)
+    items = []
+    for x, y in zip(nz[0].tolist(), nz[1].tolist()):
+        v = convert_to_number(n[x+1:x+off+1, y+1:y+off+1])
+        content = Number(v if not neg else -v)
+        items.append(Item(x, y, f.shape[0], f.shape[1], content))
+    return items
+
 def main(in_fname, out_fname):
     img = Img(in_fname, 4)
     svg = Svg(out_fname, img.size[0], img.size[1])
@@ -203,39 +275,17 @@ def main(in_fname, out_fname):
             if img[x, y]:
                 svg.point(x, y)
 
-    def find(f):
-        ori = (
-            -math.floor(f.shape[0]/2),
-            -math.floor(f.shape[1]/2)
-        )
-        out =  scipy.ndimage.filters.correlate(n, f,
-                                               mode="constant",
-                                               cval=0.0,
-                                               origin = ori
-        )
-        return (out == (f == 1).sum()).nonzero()
-
-    def add_sym(name, f):
-        nz = find(f)
-        for x, y in zip(nz[0].tolist(), nz[1].tolist()):
-            svg.annotation(x, y , f.shape[0], f.shape[1], name)
-
-    def add_num(off, f, neg=False):
-        nz = find(f)
-        for x, y in zip(nz[0].tolist(), nz[1].tolist()):
-            vals = np.flip(n[x+1:x+off+1, y+1:y+off+1].transpose().reshape(-1))
-            v = int(vals.dot(2**(np.arange(vals.size)[::-1])))
-            svg.annotation(x, y, f.shape[0], f.shape[1], v if not neg else -v)
-
+    all_values = []
     for name, f in syms:
-        add_sym(name, f)
-
+        all_values += add_sym(n, name, f)
     for off, f in enumerate(number_filters, 1):
-        add_num(off, f, False)
+        all_values += add_num(n, off, f, False)
     for off, f in enumerate(neg_filters, 1):
-        add_num(off, f, True)
-
-
+        all_values += add_num(n, off, f, True)
+    for f in vars:
+        all_values += add_sym(n, "var", f)
+    for v in all_values:
+        v.render(svg)
     svg.close()
 
 
