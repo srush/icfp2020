@@ -72,146 +72,398 @@ class Svg:
         self._f.close()
 
 
-def decode_number(img, x, y):
-    if img[x - 1, y - 1] or img[x, y - 1] or img[x - 1, y] or img[x, y]:
-        return None
-
-    # Get the size by iterating over top and left edges
-    size = 0
-    negative = False
-    while True:
-        items = (
-            img[x + size + 1, y - 1],
-            img[x + size + 1, y],
-            img[x - 1, y + size + 1],
-            img[x, y + size + 1],
-        )
-        if items == (False, True, False, True):
-            size += 1
-            continue
-        if items == (False, False, False, False):
-            break
-        if items == (False, False, False, True):
-            negative = True
-            break
-        return None
-
-    if size == 0:
-        return None
-
-    # Check that right and bottom edges are empty
-    for i in range(1,size + 2):
-        if img[x + size + 1, y+i] or img[x+i, y + size + 1]:
-            return None
-
-    # Decode the number
-    result, d = 0, 1
-    for iy in range(size):
-        for ix in range(size):
-            result += d * img[x + ix + 1, y + iy + 1]
-            d *= 2
-
-    if negative:
-        result = -result
-
-    return (size, size+negative), result
 
 M = 1
 A = 0
 N = -1
 
+class Apply:
+    def __init__(self, fn, val):
+        self.fn = fn
+        self.val = val
+
+    def call(self):
+        fn = self.fn
+        while isinstance(fn, Apply):
+            val = fn.val
+            while isinstance(val, Apply):
+                val = val.call(val)
+                fn = fn()(val)
+        return fn
+    
 from copy import copy
+true_function  = lambda : lambda x: lambda : lambda y : x 
+false_function = lambda : lambda x: lambda : lambda y : y 
+cons_function = lambda : lambda x: lambda: lambda y : lambda: lambda z: (((z())(x))())(y)
+
+def f38(protocol, ls):
+    flag, newState, data = ls 
+    if flag == 0:
+        return (modem(newState), multipledraw(data))
+    else:
+        return interact(protocol, modem(newState), send(data))
 
 
+    
 syms = [
-    ("=",
+    ("=", None, 
      [[M, M, M],
       [M, A, A],
       [M, M, M]
      ]),
-    ("ap",
+    ("ap", None, 
      [[M, M],
       [M, N]
      ]),
-    ("inc",
+    ("add", lambda : lambda x : lambda :  lambda y : lambda: x() + y(),
      [[M, M, M, M],
-     [M, M, A, A],
-     [M, A, A, A],
-     [M, A, A, A]])
+      [M, M, N, M],
+      [M, M, N, M],
+      [M, M, N, M]
+     ]),
+    ("mul", lambda : lambda x : lambda : lambda y : lambda: x() * y(),
+     [[M, M, M, M],
+      [M, N, M, N],
+      [M, N, M, N],
+      [M, N, M, N]
+     ]),
+    ("lt", lambda :  lambda x : lambda :  lambda y :  true_function if x() < y() else false_function,
+     [[M, M, M, M],
+      [M, N, N, N],
+      [M, N, N, M],
+      [M, N, M, M]
+     ]),
+    ("div", lambda :  lambda x : lambda :  lambda y : lambda: x() // y(),
+     [[M, M, M, M],
+      [M, N, N, N],
+      [M, M, N, M],
+      [M, N, N, N]
+     ]),
+    ("eq", lambda : lambda x : lambda : lambda y : true_function if x() == y() else false_function,
+     [[M, M, M, M],
+      [M, N, N, N],
+      [M, N, N, N],
+      [M, M, M, M]
+     ]),
+    ("mod", None,
+     [[M, M, M, M],
+      [M, N, M, N],
+      [M, M, N, M],
+      [M, N, M, N]
+     ]),
+    ("dem", None,
+     [[M, M, M, M],
+      [M, M, N, M],
+      [M, N, M, N],
+      [M, M, N, M]
+     ]),
+    ("modem", None,
+     [[M, M, M, M, M, M],
+      [M, N, N, N, N, N],
+      [M, N, N, N, N, N],
+      [M, N, N, N, N, N],
+      [M, M, N, N, M, M],
+      [M, N, M, M, N, N],
+     ]),
+    ("coded", None,
+     [[M, M, M, M, M, M],
+      [M, M, M, M, M, M],
+      [M, M, M, M, M, N],
+      [M, M, M, N, N, N],
+      [M, M, M, N, N, M],
+      [M, M, N, N, N, N],
+     ]),
+    ("send", lambda : lambda x: lambda: x(),
+     [[M, M, M, M],
+      [M, N, M, M],
+      [M, M, N, M],
+      [M, N, M, N],
+     ]),
+
+    ("neg", lambda : lambda x : lambda: - x(),
+     [[M, M, M],
+      [M, N, M],
+      [M, N, M]
+     ]),
+    # ("s", lambda : lambda x: lambda :  lambda y: lambda : lambda z: ((x()(z))())(y()(z)),
+    #  [[M, M, M],
+    #   [M, M, M],
+    #   [M, M, N]
+    #  ]),
+    ("s", lambda : lambda x: lambda :  lambda y: lambda : lambda z: Apply(Apply(x, z), Apply(y, z)),
+     [[M, M, M],
+      [M, M, M],
+      [M, M, N]
+     ]),
+    ("c", lambda : lambda x:lambda : lambda y: lambda : lambda z: ((x() (z))())(y),
+     [[M, M, M],
+      [M, N, M],
+      [M, M, N]
+     ]),
+    ("b", lambda : lambda x: lambda : lambda y: lambda : lambda z: x() (y()(z)),
+     [[M, M, M],
+      [M, M, N],
+      [M, M, N]
+     ]),
+    ("inc", lambda : lambda x: lambda: x() + 1, [[]]),
+    ("dec", lambda : lambda x: lambda: x() - 1, [[]]),
+
+    # ("kcomb",
+    #  [[M, M, M],
+    #   [M, N, M],
+    #   [M, N, N]
+    #  ]),
+    ("i", lambda: lambda x: x,
+     [[M, M],
+      [M, M]
+     ]),
+    ("t", true_function,
+     [[M, M, M],
+      [M, N, M],
+      [M, N, N]
+     ]),
+    ("f", false_function,
+     [[M, M, M],
+      [M, N, N],
+      [M, N, M]
+     ]),
+    ("cons", lambda : lambda x: lambda: lambda y : lambda: lambda z: (((z())(x))())(y), 
+     [[M, M, M, M, M],
+      [M, N, M, N, M],
+      [M, N, M, N, M],
+      [M, N, M, N, M],      
+      [M, M, M, M, M]
+     ]),
+    ("car", lambda : lambda x: x() (lambda : lambda a: lambda : lambda b: a),
+     [[M, M, M, M, M],
+      [M, N, M, M, M],
+      [M, N, M, N, M],
+      [M, N, M, N, M],      
+      [M, M, M, M, M]
+     ]),
+    ("cdr", lambda : lambda x: x()(lambda : lambda a: lambda : lambda b: b),
+     [[M, M, M, M, M],
+      [M, M, M, N, M],
+      [M, N, M, N, M],
+      [M, N, M, N, M],      
+      [M, M, M, M, M]
+     ]),
+    ("nil", lambda : lambda _: true_function,
+     [[M, M, M],
+      [M, N, M],
+      [M, M, M]
+     ]),
+    ("isnil", lambda : lambda x: x()(lambda : lambda _: lambda: lambda _: false_function),
+     [[M, M, M],
+      [M, M, M],
+      [M, M, M]
+     ]),
+    ("(", None,
+     [[N, N, M],
+      [N, M, M],
+      [M, M, M],
+      [N, M, M],
+      [N, N, M]
+     ]),
+
+    (",", None, 
+     [[M, M],
+      [M, M],
+      [M, M],
+      [M, M],
+      [M, M]
+     ]),
+
+    (")", None,
+     [[M, N, N],
+      [M, M, N],
+      [M, M, M],
+      [M, M, N],
+      [M, N, N]
+     ]),
+    ("vec", cons_function,
+     [[M, M, M, M, M, M],
+      [M, M, N, N, N, N],
+      [M, N, M, N, N, N],
+      [M, N, N, M, N, N],      
+      [M, N, N, N, M, N],
+      [M, N, N, N, N, M]
+     ]),
+    ("draw", None,
+     [[M, M, M, M, M, M],
+      [M, N, N, N, N, M],
+      [M, N, N, N, N, M],
+      [M, N, N, N, N, M],      
+      [M, N, N, N, N, M],
+      [M, M, M, M, M, M]
+     ]),
+    ("checkerboard", None,
+     [[M, M, M, M, M, M],
+      [M, N, M, N, M, N],
+      [M, M, N, M, N, M],
+      [M, N, M, N, M, N],      
+      [M, M, N, M, N, M],
+      [M, N, M, N, M, N]
+     ]),
+    ("multipledraw", lambda : lambda x:  x,
+     [[M, M, M, M, M, M, M],
+      [M, N, N, M, N, N, M],
+      [M, N, N, M, N, N, M],
+      [M, M, M, M, M, M, M],
+      [M, N, N, M, N, N, M],
+      [M, N, N, M, N, N, M],
+      [M, M, M, M, M, M, M],
+     ]),
+
+    ("pwr2", lambda : lambda x: lambda: 2 ** x(), 
+     [[M, M, M, M, M, M, M],
+      [M, N, N, N, N, N, M],
+      [M, N, N, M, M, N, M],
+      [M, N, M, N, M, N, M],
+      [M, N, M, N, N, N, M],
+      [M, N, N, N, N, N, M],
+      [M, M, M, M, M, M, M],
+     ]),
+    ("if0", lambda : lambda x: true_function if 0 == x() else false_function, 
+     [[M, M, M, M, M],
+      [M, N, N, N, N],
+      [M, N, M, M, M],
+      [M, M, M, N, N],
+      [M, N, M, M, M],
+     ]),
+    ("interact", lambda x: lambda y:  lambda z: f38(x, protocol(y, z)),
+     [[M, M, M, M, M, M],
+      [M, N, N, N, N, M],
+      [M, N, M, M, N, M],
+      [M, N, M, M, N, M],
+      [M, N, N, N, N, M],
+      [M, M, M, M, M, M],
+     ]),
+    ("statelessdraw", None,
+     [[M, M, M, M, M, M, M],
+      [M, N, N, N, N, M, N],
+      [M, N, N, N, N, N, N],
+      [M, N, N, N, N, N, N],
+      [M, N, N, N, N, N, N],
+      [M, N, M, N, N, N, N],
+      [M, N, N, N, N, N, N],
+     ]),
+    ("statefuldraw", None,
+     [[M, M, M, M, M, M, M],
+      [M, M, N, N, N, N, N],
+      [M, M, N, N, N, N, N],
+      [M, N, N, N, N, N, N],
+      [M, N, N, N, N, N, N],
+      [M, N, N, M, N, N, N],
+      [M, N, N, N, N, N, N],
+     ]),
+
+    ("\n...\n", None,
+     [[M, N, M, N, M, N, M, N]
+     ])
+
+    # ("modlist",
+    #  [[M, M, M, M, M],
+    #   [M, N, M, N, M],
+    #   [M, M, N, M, N],
+    #   [M, N, M, N, M],      
+    #   [M, M, N, M, N],
+
+    #  ]),
 ]
+
+
+
+def screen(sizea, size):
+    shape = []
+    top = [M for s in range(size)]
+    top[0] = N
+    top[-1] = N
+    mid = [A for s in  range(size)]
+    mid[0] = M
+    mid[-1] = M
+    shape.append(top)
+    for _ in range(sizea-2):
+        shape.append(mid)
+    shape.append(top)
+    return shape
+
+for i in range(10, 40):
+    syms.append(("|picture|", None, screen(i, 19)))
 
 def add_border(x):
     y = np.zeros((x.shape[0]+2, x.shape[1]+2))
     y.fill(N)
     y[1:-1, 1:-1] = x
     return y
-syms  = [(name, add_border(np.array(f).transpose()))
-         for (name, f) in syms]
+syms  = [(name, code, np.array(f).transpose())
+         for (name, code, f) in syms]
 
-vars = [
-    [[M, M, M],
-     [M, A, M],
-     [M, M, M]
-    ],
+vs = [
     [[M, M, M, M],
-     [M, A, A, M],
-     [M, A, A, M],
+     [M, M, N, M],
+     [M, N, A, M],
      [M, M, M, M],
     ],
     [[M, M, M, M, M],
-     [M, A, A, A, M],
-     [M, A, A, A, M],
-     [M, A, A, A, M],
+     [M, M, N, N, M],
+     [M, N, A, A, M],
+     [M, N, A, A, M],
      [M, M, M, M, M],
     ],
     [[M, M, M, M, M, M],
-     [M, A, A, A, A, M],
-     [M, A, A, A, A, M],
-     [M, A, A, A, A, M],
-     [M, A, A, A, A, M],
-     [N, M, M, M, M, M],
+     [M, M, N, N, N, M],
+     [M, N, A, A, A, M],
+     [M, N, A, A, A, M],
+     [M, N, A, A, A, M],
+     [M, M, M, M, M, M],
     ]
 ]
 
-vars = [np.array(f).transpose()
-        for f in vars]
+vs = [np.array(f).transpose()
+        for f in vs]
 
 incs = [
     [[M, M, M, M],
-     [M, M, A, A],
-     [M, A, A, A],
-     [M, A, A, A]]]
+     [M, M, N, N],
+     [M, N, A, A],
+     [M, N, A, A]]
+]
+
+incs = [np.array(f).transpose()
+        for f in incs]
+
 
 filts = [
-    [[N, M, N],
-     [M, A, A],
-     [N, A, A]
+    [[N, M],
+     [M, A],
+     [N, A]
     ],
-    [[N, M, M, N],
-     [M, A, A, N],
-     [M, A, A, N],
+    [[N, M, M],
+     [M, A, A],
+     [M, A, A],
+     [N, A, A],
+    ],
+    [[N, M, M, M],
+     [M, A, A, A],
+     [M, A, A, A],
+     [M, A, A, A],
      [N, A, A, A],
     ],
-    [[N, M, M, M, N],
-     [M, A, A, A, N],
-     [M, A, A, A, N],
-     [M, A, A, A, N],
+    [[N, M, M, M, M],
+     [M, A, A, A, A],
+     [M, A, A, A, A],
+     [M, A, A, A, A],
+     [M, A, A, A, A],
      [N, A, A, A, A],
     ],
-    [[N, M, M, M, M, N],
-     [M, A, A, A, A, N],
-     [M, A, A, A, A, N],
-     [M, A, A, A, A, N],
-     [M, A, A, A, A, N],
+    [[N, M, M, M, M, M],
+     [M, A, A, A, A, A],
+     [M, A, A, A, A, A],
+     [M, A, A, A, A, A],
+     [M, A, A, A, A, A],
+     [M, A, A, A, A, A],
      [N, A, A, A, A, A],
-    ],
-    [[N, M, M, M, M, M, N],
-     [M, A, A, A, A, A, N],
-     [M, A, A, A, A, A, N],
-     [M, A, A, A, A, A, N],
-     [M, A, A, A, A, A, N],
-     [M, A, A, A, A, A, N],
-     [N, A, A, A, A, A, A],
     ]
 ]
 nfilts = []
@@ -226,9 +478,16 @@ number_filters  = [np.array(f).transpose()
 neg_filters  = [np.array(f).transpose()
                 for f in nfilts]
 
+# binary_filters = []
+# for i in range(4, 50):
+#     out = np.zeros((i, 2))
+#     out.fill(0)
+#     for j, i in enumerate(r):
+#         out[j, 1 if (i == "0") else 1] = M
+#     binary_filters.append(out)
 
 
-def find(n, f):
+def search(n, f):
     ori = (
         -math.floor(f.shape[0]/2),
         -math.floor(f.shape[1]/2)
@@ -238,6 +497,10 @@ def find(n, f):
                                            cval=0.0,
                                            origin = ori
     )
+    return out
+
+def find(n, f):
+    out = search(n, f)
     return (out == (f == 1).sum()).nonzero()
 
 def convert_to_number(area):
@@ -245,17 +508,21 @@ def convert_to_number(area):
     v = int(vals.dot(2**(np.arange(vals.size)[::-1])))
     return v
 
-def add_sym(n, name, f, extra=None):
+def find_sym(n, name, f, extra=None):
     nz = find(n, f)
     items = []
     for x, y in zip(nz[0].tolist(), nz[1].tolist()):
+        content = None
         if extra is not None:
-            content = extra(n[x:f.shape[0], y:f.shape[1]])
+            content = extra(n[x:x+f.shape[0], y:y+f.shape[1]])
+            if content is None:
+                continue
         sym = Sym(name, content)
+        
         items.append(Item(x, y , f.shape[0], f.shape[1], sym))
     return items
 
-def add_num(n, off, f, neg=False):
+def find_num(n, off, f, neg=False):
     nz = find(n ,f)
     items = []
     for x, y in zip(nz[0].tolist(), nz[1].tolist()):
@@ -263,6 +530,31 @@ def add_num(n, off, f, neg=False):
         content = Number(v if not neg else -v)
         items.append(Item(x, y, f.shape[0], f.shape[1], content))
     return items
+
+
+def find_mod(n):
+    out = (search(n, np.array([[-1, 1]])) == 1) + \
+          (search(n, np.array([[1, -1]])) == 1)    
+    
+    items = []
+    for i in range(3, 20):
+        f = np.ones((i, 1))
+        nz = find(out*1, f)
+        for x, y in zip(nz[0].tolist(), nz[1].tolist()):
+            vals = n[x:x+f.shape[0], y] 
+            # print(vals)
+            positive = (vals[1] == 1)
+            width = 0
+            for i in range(2, vals.shape[0]):
+                width += 1
+                if vals[i] == 0:
+                    break
+
+            vals = vals[i+1:]
+            v = int(vals.dot(2**(np.arange(vals.size)[::-1]))) * (1 if positive else -1)
+            items.append(Item(x, y, f.shape[0], 2, Sym("[", v)))
+    return items
+
 
 def main(in_fname, out_fname):
     img = Img(in_fname, 4)
@@ -276,17 +568,63 @@ def main(in_fname, out_fname):
                 svg.point(x, y)
 
     all_values = []
-    for name, f in syms:
-        all_values += add_sym(n, name, f)
+
+    for name, _, f in syms:
+        all_values += find_sym(n, name, f)
+        
     for off, f in enumerate(number_filters, 1):
-        all_values += add_num(n, off, f, False)
+        all_values += find_num(n, off, f, False)
+
     for off, f in enumerate(neg_filters, 1):
-        all_values += add_num(n, off, f, True)
-    for f in vars:
-        all_values += add_sym(n, "var", f)
+        all_values += find_num(n, off, f, True)
+
+
+    def find_var_num(box):
+        
+        
+        reverse_box = -1 * (box[2:-1, 2:-1] - 1)
+        return convert_to_number(reverse_box)
+    
+    for f in vs:
+        all_values += find_sym(n, "var", f, find_var_num)
+
+    def find_inc_num(box):
+        neg = (box[2, 2] == 1)
+        return convert_to_number(box[3:, 3:] ) * (-1 if neg else 1)
+    for f in incs:
+        all_values += find_sym(n, "inc", f, find_inc_num)
+
+    
+    all_values += find_mod(n)
+
+    seen = np.zeros(n.shape)
+    seen[0, :] = 1
+    seen[-1, :] = 1
+    seen[:, 0] = 1
+    seen[:, -1] = 1
+
+    
+    all_values.sort(key=lambda x: x.size[0] * x.size[1])
+    all_values.reverse()
+    kept = []
     for v in all_values:
+        ran = seen[v.xy[0]: v.xy[0] + v.size[0], v.xy[1]: v.xy[1] + v.size[1]]
+        if ran.sum() > 0:
+            continue
+        ran[:] = 1
+        kept.append(v)
         v.render(svg)
+        
+    kept.sort(key=lambda x: (x.xy[1], x.xy[0]))
+    last = None
+    for v in kept:
+        if last is not None and v.xy[1] > last.xy[1] + last.size[1]:
+            print()
+        print(v.content.write(), end=" ")
+        last = v
+
+        
     svg.close()
 
-
-main(sys.argv[1], sys.argv[2])
+if __name__ == "__main__":
+    main(sys.argv[1], sys.argv[2])
