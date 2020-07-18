@@ -1,0 +1,4 @@
+:3 = ap ap ap s add inc 1
+:4 = ap ap ap s mul ap add 1 6
+:5 = ap ap ap c add 1 2
+:6 = ap ap ap b inc dec 6
